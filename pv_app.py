@@ -1,25 +1,24 @@
 import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
+import json
 
 st.set_page_config(page_title="PV CaseFlow", layout="wide")
 
 # ================= UI STYLING =================
 st.markdown("""
 <style>
-
-/* HEADER */
 .header {
     background: linear-gradient(90deg,#0f172a,#1e293b);
     color:white;
-    padding:14px 24px;
+    padding:16px 24px;
     border-radius:10px;
     font-size:18px;
     font-weight:600;
-    margin-bottom:12px;
+    margin-top:50px;
+    margin-bottom:8px;
 }
 
-/* INPUTS */
 div[data-baseweb="input"] > div,
 div[data-baseweb="select"] > div,
 textarea {
@@ -28,29 +27,14 @@ textarea {
     background-color: #ffffff !important;
 }
 
-div[data-baseweb="input"] > div:hover,
-div[data-baseweb="select"] > div:hover,
-textarea:hover {
-    border: 2px solid #2563eb !important;
-}
-
-div[data-baseweb="input"] > div:focus-within,
-div[data-baseweb="select"] > div:focus-within,
-textarea:focus {
-    border: 2px solid #1d4ed8 !important;
-    box-shadow: 0 0 0 1px #1d4ed8 !important;
-}
-
-/* SECTION CARD */
 .section-card {
     background: #f9fafb;
-    padding: 16px;
+    padding: 0px;
     border-radius: 10px;
     border: 1px solid #e5e7eb;
-    margin-bottom: 15px;
+    margin-bottom: 12px;
 }
 
-/* BUTTON */
 .stButton > button {
     background-color: #1d4ed8;
     color: white;
@@ -58,12 +42,10 @@ textarea:focus {
     padding: 6px 14px;
 }
 
-/* COMPACT */
 .block-container {
-    padding-top: 1rem;
-    padding-bottom: 1rem;
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -80,12 +62,15 @@ with st.sidebar:
     st.markdown("• Review")
     st.markdown("• Submission")
 
-# SESSION
-for key in ["products","events","concomitant","reporters","saved_cases"]:
+# ================= SESSION =================
+for key in ["products","events","reporters","saved_cases"]:
     if key not in st.session_state:
         st.session_state[key] = [{}] if key!="saved_cases" else []
 
-# SLA
+if "concomitant" not in st.session_state:
+    st.session_state.concomitant = []
+
+# ================= SLA =================
 def calculate_sla(seriousness, ird):
     if seriousness in ["Death","Life-Threatening"]:
         days=7
@@ -96,7 +81,7 @@ def calculate_sla(seriousness, ird):
     due=ird+timedelta(days=days)
     return due, "Overdue" if date.today()>due else "On Time"
 
-# TABS
+# ================= TABS =================
 tab1,tab2,tab3,tab4,tab5 = st.tabs(["General","Patient","Product","Events","Dashboard"])
 
 # ================= GENERAL =================
@@ -124,16 +109,17 @@ with tab1:
     for i in range(len(st.session_state.reporters)):
         c1,c2=st.columns(2)
         with c1:
-            st.text_input(f"Name {i}",key=f"r_name{i}")
-            st.text_input(f"Address {i}",key=f"r_addr{i}")
-            st.text_input(f"City {i}",key=f"r_city{i}")
-            st.text_input(f"State {i}",key=f"r_state{i}")
+            st.text_input("Name" if i==0 else f"Name {i+1}",key=f"r_name{i}")
+            st.text_input("Address" if i==0 else f"Address {i+1}",key=f"r_addr{i}")
+            st.text_input("City" if i==0 else f"City {i+1}",key=f"r_city{i}")
+            st.text_input("State" if i==0 else f"State {i+1}",key=f"r_state{i}")
         with c2:
-            country_r=st.text_input(f"Country {i}",key=f"r_country{i}")
-            st.text_input(f"Postal Code {i}",key=f"r_post{i}")
-            st.text_input(f"Phone {i}",key=f"r_phone{i}")
-            st.text_input(f"Email {i}",key=f"r_email{i}")
-            occ=st.selectbox(f"Occupation {i}",["Consumer","HCP","Physician","Nurse"],key=f"r_occ{i}")
+            country_r=st.text_input("Country" if i==0 else f"Country {i+1}",key=f"r_country{i}")
+            st.text_input("Postal Code" if i==0 else f"Postal Code {i+1}",key=f"r_post{i}")
+            st.text_input("Phone" if i==0 else f"Phone {i+1}",key=f"r_phone{i}")
+            st.text_input("Email" if i==0 else f"Email {i+1}",key=f"r_email{i}")
+            occ=st.selectbox("Occupation" if i==0 else f"Occupation {i+1}",
+                             ["Consumer","HCP","Physician","Nurse"],key=f"r_occ{i}")
 
         reporters_data.append({"country":country_r,"occupation":occ})
 
@@ -149,7 +135,13 @@ with tab2:
         c1,c2=st.columns(2)
         with c1:
             patient_name=st.text_input("Patient Name")
-            age=st.number_input("Age",min_value=0)
+
+            c_age1,c_age2=st.columns([2,1])
+            with c_age1:
+                age=st.number_input("Age",min_value=0)
+            with c_age2:
+                age_unit=st.selectbox("Unit",["Years","Months","Days"])
+
         with c2:
             gender=st.selectbox("Gender",["Male","Female","Other"])
 
@@ -171,30 +163,49 @@ with tab3:
         for i in range(len(st.session_state.products)):
             c1,c2,c3=st.columns(3)
             with c1:
-                name=st.text_input(f"Drug {i}",key=f"p{i}")
+                name=st.text_input("Drug" if i==0 else f"Drug {i+1}",key=f"p{i}")
             with c2:
-                dose=st.text_input(f"Dose {i}",key=f"d{i}")
-                unit=st.selectbox(f"Unit {i}",["mg","mcg","g","DF"],key=f"u{i}")
+                dose=st.text_input("Dose" if i==0 else f"Dose {i+1}",key=f"d{i}")
+                unit=st.selectbox("Unit" if i==0 else f"Unit {i+1}",["mg","mcg","g","DF"],key=f"u{i}")
             with c3:
-                freq=st.selectbox(f"Frequency {i}",["Once daily","Twice daily","Weekly","Other"],key=f"f{i}")
-                action=st.selectbox(f"Action {i}",["Dose Increased","Dose Decreased","Stopped","Unknown"],key=f"a{i}")
-            sd=st.date_input(f"Start Date {i}",key=f"sd{i}")
-            ed=st.date_input(f"Stop Date {i}",key=f"ed{i}")
+                freq=st.selectbox("Frequency" if i==0 else f"Frequency {i+1}",["Once daily","Twice daily","Weekly","Other"],key=f"f{i}")
+                action=st.selectbox("Action" if i==0 else f"Action {i+1}",["Dose Increased","Dose Decreased","Stopped","Unknown"],key=f"a{i}")
+
+            d1,d2=st.columns(2)
+            with d1:
+                sd=st.date_input("Start Date" if i==0 else f"Start Date {i+1}",key=f"sd{i}")
+            with d2:
+                ed=st.date_input("Stop Date" if i==0 else f"Stop Date {i+1}",key=f"ed{i}")
+
             products_data.append({"name":name,"dose":dose,"unit":unit,"freq":freq,"action":action,"start":sd,"stop":ed})
 
     with sub2:
         if st.button("Add Concomitant"):
             st.session_state.concomitant.append({})
+
         concomitant_data=[]
         for i in range(len(st.session_state.concomitant)):
-            c1,c2=st.columns(2)
+            c1,c2,c3=st.columns(3)
             with c1:
-                name=st.text_input(f"Con Drug {i}",key=f"c{i}")
+                name=st.text_input("Concomitant Drug" if i==0 else f"Concomitant Drug {i+1}",key=f"c{i}")
             with c2:
-                dose=st.text_input(f"Con Dose {i}",key=f"cd{i}")
-                unit=st.selectbox(f"Unit {i}",["mg","mcg","g","DF"],key=f"cu{i}")
-            freq=st.selectbox(f"Frequency {i}",["Once daily","Twice daily","Weekly","Other"],key=f"cf{i}")
-            concomitant_data.append({"name":name,"dose":dose,"unit":unit,"freq":freq})
+                dose=st.text_input("Dose" if i==0 else f"Dose {i+1}",key=f"cd{i}")
+                unit=st.selectbox("Unit" if i==0 else f"Unit {i+1}",["mg","mcg","g","DF"],key=f"cu{i}")
+            with c3:
+                freq=st.selectbox("Frequency" if i==0 else f"Frequency {i+1}",["Once daily","Twice daily","Weekly","Other"],key=f"cf{i}")
+                action=st.selectbox("Action Taken" if i==0 else f"Action Taken {i+1}",
+                                   ["Dose Increased","Dose Decreased","Stopped","Unknown"],key=f"ca{i}")
+
+            d1,d2=st.columns(2)
+            with d1:
+                sd=st.date_input("Start Date" if i==0 else f"Start Date {i+1}",key=f"csd{i}")
+            with d2:
+                ed=st.date_input("Stop Date" if i==0 else f"Stop Date {i+1}",key=f"ced{i}")
+
+            concomitant_data.append({
+                "name":name,"dose":dose,"unit":unit,"freq":freq,
+                "action":action,"start":sd,"stop":ed
+            })
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -210,18 +221,18 @@ with tab4:
 
         events_data=[]
         for i in range(len(st.session_state.events)):
-            event=st.text_input(f"Event {i}",key=f"e{i}")
+            event=st.text_input("Event" if i==0 else f"Event {i+1}",key=f"e{i}")
             c1,c2=st.columns(2)
             with c1:
-                event_start=st.date_input(f"Event Start Date {i}",key=f"es{i}",value=None)
+                event_start=st.date_input("Event Start Date" if i==0 else f"Event Start Date {i+1}",key=f"es{i}",value=None)
             with c2:
-                event_stop=st.date_input(f"Event Stop Date {i}",key=f"ee{i}",value=None)
+                event_stop=st.date_input("Event Stop Date" if i==0 else f"Event Stop Date {i+1}",key=f"ee{i}",value=None)
 
-            seriousness=st.selectbox(f"Seriousness {i}",
+            seriousness=st.selectbox("Seriousness" if i==0 else f"Seriousness {i+1}",
                 ["Death","Life-Threatening","Hospitalization","Medically Significant","Congenital Anomaly","Non-serious"],
                 key=f"s{i}")
 
-            outcome=st.selectbox(f"Outcome {i}",
+            outcome=st.selectbox("Outcome" if i==0 else f"Outcome {i+1}",
                 ["Recovered","Not Recovered","Fatal","Unknown"],key=f"o{i}")
 
             events_data.append({"event":event,"seriousness":seriousness,"outcome":outcome,"start":event_start,"stop":event_stop})
@@ -241,7 +252,7 @@ with tab4:
             reporter_occ=reporters_data[0]["occupation"] if reporters_data else "reporter"
             reporter_country=reporters_data[0]["country"] if reporters_data else ""
 
-            patient_info=f"{age}-year-old {gender.lower()}" if age else "patient"
+            patient_info=f"{age}-year-old {gender.lower()} patient" if age else "patient"
 
             narrative=f"This {report_type.lower()} report received from a {reporter_occ.lower()}"
             if reporter_country:
@@ -268,15 +279,75 @@ with tab4:
                 if p["name"]:
                     narrative+=f"Action taken with {p['name']} was {p['action'].lower()}. "
 
+            for c in concomitant_data:
+                if c["name"]:
+                    start = c["start"].strftime("%d%b%Y") if c["start"] else "an unknown date"
+                    stop = c["stop"].strftime("%d%b%Y") if c["stop"] else None
+
+                    narrative += f"The patient was also receiving concomitant drug {c['name']} {c['dose']} {c['unit']} {c['freq']} starting on {start}. "
+
+                    if stop:
+                        narrative += f"The concomitant drug was stopped on {stop}. "
+
+                    narrative += f"Action taken with concomitant drug {c['name']} was {c['action'].lower()}. "
+
             outcome=events_data[0]["outcome"] if events_data else "Unknown"
             narrative+=f"Outcome: {outcome}."
 
             st.success("Processed")
             edited=st.text_area("Narrative",value=narrative,height=200)
+            
+# ================= EXPORT OPTIONS =================
+
+# Prepare case data (no logic change, just packaging)
+            case_export = {
+                "case_id": case_id,
+                "patient": patient_name,
+                "age": age,
+                "gender": gender,
+                "country": country,
+                "report_type": report_type,
+                "seriousness": seriousness_value,
+                "outcome": outcome,
+                "narrative": edited
+            }
+
+            # ===== XML EXPORT =====
+            xml_data = f"""
+            <case>
+                <case_id>{case_id}</case_id>
+                <patient>{patient_name}</patient>
+                <age>{age}</age>
+                <gender>{gender}</gender>
+                <country>{country}</country>
+                <report_type>{report_type}</report_type>
+                <seriousness>{seriousness_value}</seriousness>
+                <outcome>{outcome}</outcome>
+                <narrative>{edited}</narrative>
+            </case>
+            """
+
+            c1, c2 = st.columns(2)
+
+            with c1:
+                st.download_button(
+                    label="⬇️ Export as XML",
+                    data=xml_data,
+                    file_name=f"{case_id}_case.xml",
+                    mime="application/xml"
+                )
+
+            with c2:
+                st.download_button(
+                    label="⬇️ Export as CIOMS (JSON)",
+                    data=json.dumps(case_export, indent=4),
+                    file_name=f"{case_id}_cioms.json",
+                    mime="application/json"
+                )
 
             record={"Case ID":case_id,"Patient":patient_name,"Seriousness":seriousness_value,
-                    "Status":case_status,"SLA Status":sla_status,"Due Date":due_date,
-                    "Country":country,"Narrative":edited}
+                                "Status":case_status,"SLA Status":sla_status,"Due Date":due_date,
+                                "Country":country,"Narrative":edited}
 
             updated=False
             for i,c in enumerate(st.session_state.saved_cases):
@@ -287,7 +358,7 @@ with tab4:
             if not updated:
                 st.session_state.saved_cases.append(record)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
 
 # ================= DASHBOARD =================
 with tab5:
